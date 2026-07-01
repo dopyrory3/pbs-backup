@@ -1,6 +1,6 @@
 # PBS Backup Client Suite
 
-Hook-based file backup suite for Debian 12 VMs using `proxmox-backup-client`.
+Hook-based file backup suite for Ubuntu LTS VMs (22.04, 24.04, 26.04) using `proxmox-backup-client`.
 The same code is deployed to every VM. Only `/etc/pbs-backup/config` is per-VM.
 
 ## Repository layout
@@ -35,7 +35,7 @@ Security:
 
 ## Install
 
-Run on each Debian 12 VM as root:
+Run on each Ubuntu LTS VM as root:
 
 ```bash
 ./install.sh
@@ -43,11 +43,18 @@ Run on each Debian 12 VM as root:
 
 Installer actions:
 
-1. Adds the PBS client APT repo.
-2. Installs `proxmox-backup-client`.
-3. Installs files into `/etc/pbs-backup`.
-4. Preserves existing `/etc/pbs-backup/config`.
-5. Installs and enables `pbs-backup.timer`.
+1. Detects Ubuntu release and validates support (`22.04`, `24.04`, `26.04`).
+2. Adds the matching PBS client APT repo and key for that Ubuntu codename.
+3. Installs `proxmox-backup-client`.
+4. Installs files into `/etc/pbs-backup`.
+5. Preserves existing `/etc/pbs-backup/config`.
+6. Installs and enables `pbs-backup.timer`.
+
+If needed, override the suite used for the Proxmox repo/key:
+
+```bash
+PBS_CLIENT_SUITE=noble ./install.sh
+```
 
 ## Backup behavior
 
@@ -159,7 +166,7 @@ proxmox-backup-client unmount /mnt/restore
 
 ## Full VM loss runbook (file-level)
 
-1. Provision fresh Debian 12 VM.
+1. Provision fresh Ubuntu LTS VM.
 2. Install this suite and `proxmox-backup-client`.
 3. Restore required data from snapshot.
 4. Replay package manifests:

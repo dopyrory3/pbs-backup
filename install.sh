@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DIR="/etc/pbs-backup"
 KEYRING_DIR="/etc/apt/keyrings"
-KEYRING_FILE="${KEYRING_DIR}/proxmox-release-bookworm.gpg"
 PBS_LIST_FILE="/etc/apt/sources.list.d/pbs-client.list"
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -12,12 +11,49 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-echo "[1/6] Configuring Proxmox PBS client APT repository"
+if [[ ! -r /etc/os-release ]]; then
+  echo "Cannot detect OS: /etc/os-release is missing."
+  exit 1
+fi
+
+# shellcheck source=/etc/os-release
+source /etc/os-release
+
+if [[ "${ID:-}" != "ubuntu" ]]; then
+  echo "Unsupported OS: ${ID:-unknown}. This installer currently supports Ubuntu LTS only."
+  exit 1
+fi
+
+case "${VERSION_ID:-}" in
+  22.04|24.04|26.04)
+    ;;
+  *)
+    echo "Unsupported Ubuntu version: ${VERSION_ID:-unknown}. Supported: 22.04, 24.04, 26.04."
+    exit 1
+    ;;
+esac
+
+UBUNTU_SUITE="${PBS_CLIENT_SUITE:-${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}}"
+if [[ -z "$UBUNTU_SUITE" ]]; then
+  case "$VERSION_ID" in
+    22.04) UBUNTU_SUITE="jammy" ;;
+    24.04) UBUNTU_SUITE="noble" ;;
+    26.04) UBUNTU_SUITE="questing" ;;
+  esac
+fi
+
+KEYRING_FILE="${KEYRING_DIR}/proxmox-release-${UBUNTU_SUITE}.gpg"
+
+echo "[1/6] Configuring Proxmox PBS client APT repository for Ubuntu ${VERSION_ID} (${UBUNTU_SUITE})"
 install -d -m 0755 "$KEYRING_DIR"
-curl -fsSL https://download.proxmox.com/debian/proxmox-release-bookworm.gpg -o "$KEYRING_FILE"
+if ! curl -fsSL "https://download.proxmox.com/debian/proxmox-release-${UBUNTU_SUITE}.gpg" -o "$KEYRING_FILE"; then
+  echo "Failed to download Proxmox release key for suite '${UBUNTU_SUITE}'."
+  echo "If your host codename differs from the desired PBS suite, rerun with PBS_CLIENT_SUITE=<suite>."
+  exit 1
+fi
 chmod 0644 "$KEYRING_FILE"
 
-echo "deb [signed-by=${KEYRING_FILE}] https://download.proxmox.com/debian/pbs-client bookworm main" > "$PBS_LIST_FILE"
+echo "deb [signed-by=${KEYRING_FILE}] https://download.proxmox.com/debian/pbs-client ${UBUNTU_SUITE} main" > "$PBS_LIST_FILE"
 
 apt-get update
 apt-get install -y proxmox-backup-client

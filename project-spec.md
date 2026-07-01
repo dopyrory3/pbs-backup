@@ -1,7 +1,7 @@
 # Project: PBS Backup Client Suite
 
 ## Goal
-A generic, hook-based backup script suite deployed identically across ~10 Debian 12
+A generic, hook-based backup script suite deployed identically across ~10 Ubuntu LTS
 Linux VMs in Azure, pushing file-level backups to a self-hosted Proxmox Backup Server
 (PBS) over a private network path. The same code deploys to every VM; the only
 per-VM artifact is a credentials/config file.
@@ -94,8 +94,8 @@ config.example has placeholders and is committed; real config is 0600, git-ignor
 
 ### install.sh
 Idempotent single-VM installer:
-- Adds the pbs-client apt repo + key (deb https://download.proxmox.com/debian/pbs-client
-  bookworm main; key from proxmox-release-bookworm.gpg).
+- Adds the pbs-client apt repo + key for the host Ubuntu codename (jammy/noble/questing)
+  from download.proxmox.com.
 - `apt install proxmox-backup-client`.
 - Copies /etc/pbs-backup/ tree, sets perms (config 0600, *.sh 0755).
 - Installs + enables the systemd timer.
@@ -113,12 +113,12 @@ Idempotent single-VM installer:
   This proves: runner found hook → executed it → hook wrote file → backup captured
   fresh file → restore retrieves it.
 - README: how to verify a snapshot (`snapshot list`), how to mount+restore, and the
-  full-VM-loss recovery runbook (provision fresh Debian → install client → restore →
+  full-VM-loss recovery runbook (provision fresh Ubuntu LTS → install client → restore →
   replay manual-packages.txt → restore data → restore selective /etc, leaving
   fstab/network/machine-id/ssh host keys freshly generated).
 
 ## Constraints & conventions
-- Target: Debian 12, proxmox-backup-client from pbs-client repo.
+- Target: Ubuntu LTS 22.04/24.04/26.04, proxmox-backup-client from pbs-client repo.
 - Bash, shellcheck-clean.
 - No secrets in logs. No secrets committed. Secrets are 0600 files only.
 - Every script logs to `logger -t pbs-backup`.
