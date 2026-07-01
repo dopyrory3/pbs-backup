@@ -1,0 +1,15 @@
+# Copy to /etc/pbs-backup/config and set real values.
+# This file is shell-sourced by run-backup.sh.
+
+PBS_REPOSITORY='root@pam!<token-name>@<PBS-PRIVATE-IP>:store1'
+PBS_PASSWORD='<token-secret>'
+PBS_FINGERPRINT='<sha256-fingerprint>'
+
+# Optional; defaults to /var/backups/pbs-dumps
+# DUMP_DIR='/var/backups/pbs-dumps'
+
+# Optional bash array for per-VM extra excludes
+# EXTRA_EXCLUDES=(
+#   '/var/lib/some-app/cache'
+#   '/srv/scratch'
+# )

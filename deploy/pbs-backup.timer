@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily PBS backup with jitter
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=2h
+Persistent=true
+Unit=pbs-backup.service
+
+[Install]
+WantedBy=timers.target
