@@ -44,17 +44,28 @@ Run on each Ubuntu LTS VM as root:
 Installer actions:
 
 1. Detects Ubuntu release and validates support (`22.04`, `24.04`, `26.04`).
-2. Adds the matching PBS client APT repo and key for that Ubuntu codename.
-3. Installs `proxmox-backup-client`.
+2. Adds the PBS client APT repo (default suite `bookworm`) and release key.
+3. Installs `proxmox-backup-client-static` on Ubuntu 22.04, otherwise `proxmox-backup-client`.
 4. Installs files into `/etc/pbs-backup`.
 5. Preserves existing `/etc/pbs-backup/config`.
 6. Installs and enables `pbs-backup.timer`.
 
-If needed, override the suite used for the Proxmox repo/key:
+Overrides (if needed):
 
 ```bash
-PBS_CLIENT_SUITE=noble ./install.sh
+PBS_CLIENT_SUITE=bookworm ./install.sh
+PBS_KEY_SUITE=bookworm ./install.sh
+PBS_APT_BASE_URL=http://download.proxmox.com ./install.sh
+PBS_CLIENT_PACKAGE=proxmox-backup-client-static ./install.sh
 ```
+
+Note: in some networks, HTTPS to `download.proxmox.com` may fail due certificate/hostname issues.
+The installer probes endpoints and can fall back to the HTTP mirror URL if needed.
+
+Ubuntu 22.04 note:
+
+- Dynamic `proxmox-backup-client` may not resolve on Jammy due newer shared library requirements.
+- The installer uses `proxmox-backup-client-static` by default on Jammy to avoid that dependency mismatch.
 
 ## Backup behavior
 

@@ -33,30 +33,93 @@ case "${VERSION_ID:-}" in
     ;;
 esac
 
-UBUNTU_SUITE="${PBS_CLIENT_SUITE:-${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}}"
-if [[ -z "$UBUNTU_SUITE" ]]; then
-  case "$VERSION_ID" in
-    22.04) UBUNTU_SUITE="jammy" ;;
-    24.04) UBUNTU_SUITE="noble" ;;
-    26.04) UBUNTU_SUITE="questing" ;;
-  esac
+if [[ "${VERSION_ID}" == "22.04" ]]; then
+  PBS_CLIENT_PACKAGE_DEFAULT="proxmox-backup-client-static"
+else
+  PBS_CLIENT_PACKAGE_DEFAULT="proxmox-backup-client"
 fi
 
-KEYRING_FILE="${KEYRING_DIR}/proxmox-release-${UBUNTU_SUITE}.gpg"
+PBS_CLIENT_PACKAGE="${PBS_CLIENT_PACKAGE:-$PBS_CLIENT_PACKAGE_DEFAULT}"
 
-echo "[1/6] Configuring Proxmox PBS client APT repository for Ubuntu ${VERSION_ID} (${UBUNTU_SUITE})"
+PBS_CLIENT_SUITE="${PBS_CLIENT_SUITE:-bookworm}"
+PBS_KEY_SUITE="${PBS_KEY_SUITE:-bookworm}"
+KEYRING_FILE="${KEYRING_DIR}/proxmox-release-${PBS_KEY_SUITE}.gpg"
+PBS_APT_BASE_URL="${PBS_APT_BASE_URL:-https://download.proxmox.com}"
+
+select_repo_base_url() {
+  local suite="$1"
+  local preferred_base="$2"
+  local candidates=()
+  local base
+
+  candidates+=("${preferred_base}")
+  if [[ "${preferred_base}" != "https://download.proxmox.com" ]]; then
+    candidates+=("https://download.proxmox.com")
+  fi
+  if [[ "${preferred_base}" != "http://download.proxmox.com" ]]; then
+    candidates+=("http://download.proxmox.com")
+  fi
+
+  for base in "${candidates[@]}"; do
+    if curl -fsSIL "${base}/debian/pbs-client/dists/${suite}/Release" >/dev/null; then
+      PBS_APT_BASE_URL="$base"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+download_release_key() {
+  local key_suite="$1"
+  local base="$2"
+
+  if curl -fsSL "${base}/debian/proxmox-release-${key_suite}.gpg" -o "$KEYRING_FILE"; then
+    return 0
+  fi
+
+  # Some networks break TLS for download.proxmox.com; fallback to HTTP when needed.
+  if [[ "$base" == "https://download.proxmox.com" ]]; then
+    if curl -fsSL "http://download.proxmox.com/debian/proxmox-release-${key_suite}.gpg" -o "$KEYRING_FILE"; then
+      PBS_APT_BASE_URL="http://download.proxmox.com"
+      echo "Warning: HTTPS to download.proxmox.com failed; using HTTP mirror bootstrap."
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+echo "[1/6] Configuring Proxmox PBS client APT repository for Ubuntu ${VERSION_ID} (suite ${PBS_CLIENT_SUITE})"
 install -d -m 0755 "$KEYRING_DIR"
-if ! curl -fsSL "https://download.proxmox.com/debian/proxmox-release-${UBUNTU_SUITE}.gpg" -o "$KEYRING_FILE"; then
-  echo "Failed to download Proxmox release key for suite '${UBUNTU_SUITE}'."
-  echo "If your host codename differs from the desired PBS suite, rerun with PBS_CLIENT_SUITE=<suite>."
+
+if ! select_repo_base_url "$PBS_CLIENT_SUITE" "$PBS_APT_BASE_URL"; then
+  echo "Failed to find reachable Proxmox repo for suite '${PBS_CLIENT_SUITE}'."
+  echo "You can override with PBS_APT_BASE_URL=<base-url> and PBS_CLIENT_SUITE=<suite>."
+  exit 1
+fi
+
+if ! download_release_key "$PBS_KEY_SUITE" "$PBS_APT_BASE_URL"; then
+  echo "Failed to download Proxmox release key for key suite '${PBS_KEY_SUITE}'."
+  echo "You can override with PBS_KEY_SUITE=<suite> and PBS_APT_BASE_URL=<base-url>."
   exit 1
 fi
 chmod 0644 "$KEYRING_FILE"
 
-echo "deb [signed-by=${KEYRING_FILE}] https://download.proxmox.com/debian/pbs-client ${UBUNTU_SUITE} main" > "$PBS_LIST_FILE"
+echo "Using Proxmox APT base URL: ${PBS_APT_BASE_URL}"
+echo "deb [signed-by=${KEYRING_FILE}] ${PBS_APT_BASE_URL}/debian/pbs-client ${PBS_CLIENT_SUITE} main" > "$PBS_LIST_FILE"
 
 apt-get update
-apt-get install -y proxmox-backup-client
+
+if ! apt-get -s install "$PBS_CLIENT_PACKAGE" >/dev/null 2>&1; then
+  echo "${PBS_CLIENT_PACKAGE} is not installable with current distro/suite settings."
+  echo "Host: Ubuntu ${VERSION_ID}; Suite: ${PBS_CLIENT_SUITE}; Base URL: ${PBS_APT_BASE_URL}"
+  echo "Adjust overrides: PBS_CLIENT_PACKAGE / PBS_CLIENT_SUITE / PBS_KEY_SUITE / PBS_APT_BASE_URL"
+  exit 1
+fi
+
+echo "Installing package: ${PBS_CLIENT_PACKAGE}"
+apt-get install -y "$PBS_CLIENT_PACKAGE"
 
 echo "[2/6] Installing backup suite into ${TARGET_DIR}"
 install -d -m 0755 "$TARGET_DIR"

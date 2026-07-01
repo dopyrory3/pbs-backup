@@ -94,8 +94,8 @@ config.example has placeholders and is committed; real config is 0600, git-ignor
 
 ### install.sh
 Idempotent single-VM installer:
-- Adds the pbs-client apt repo + key for the host Ubuntu codename (jammy/noble/questing)
-  from download.proxmox.com.
+- Adds the pbs-client apt repo + key from download.proxmox.com (default suite: bookworm,
+  with override support via environment variables).
 - `apt install proxmox-backup-client`.
 - Copies /etc/pbs-backup/ tree, sets perms (config 0600, *.sh 0755).
 - Installs + enables the systemd timer.
@@ -118,7 +118,8 @@ Idempotent single-VM installer:
   fstab/network/machine-id/ssh host keys freshly generated).
 
 ## Constraints & conventions
-- Target: Ubuntu LTS 22.04/24.04/26.04, proxmox-backup-client from pbs-client repo.
+- Target: Ubuntu LTS hosts with proxmox-backup-client from pbs-client repo.
+  For Ubuntu 22.04, use proxmox-backup-client-static to avoid shared-library dependency mismatch.
 - Bash, shellcheck-clean.
 - No secrets in logs. No secrets committed. Secrets are 0600 files only.
 - Every script logs to `logger -t pbs-backup`.
