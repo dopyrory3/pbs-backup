@@ -130,6 +130,9 @@ install -m 0755 "${SCRIPT_DIR}/run-backup.sh" "${TARGET_DIR}/run-backup.sh"
 install -m 0644 "${SCRIPT_DIR}/config.example" "${TARGET_DIR}/config.example"
 install -m 0755 "${SCRIPT_DIR}/pre-backup.d/10-marker.sh" "${TARGET_DIR}/pre-backup.d/10-marker.sh"
 install -m 0755 "${SCRIPT_DIR}/post-backup.d/90-cleanup-dumps.sh" "${TARGET_DIR}/post-backup.d/90-cleanup-dumps.sh"
+if [[ -f "${SCRIPT_DIR}/version" ]]; then
+  install -m 0644 "${SCRIPT_DIR}/version" "${TARGET_DIR}/version"
+fi
 
 if [[ -f "${TARGET_DIR}/config" ]]; then
   echo "[3/6] Preserving existing ${TARGET_DIR}/config"

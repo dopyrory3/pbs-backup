@@ -14,6 +14,8 @@ The same code is deployed to every VM. Only `/etc/pbs-backup/config` is per-VM.
 - `install.sh` - Idempotent installer for a single VM.
 - `uninstall.sh` - Removes what install.sh added, with opt-in flags for deeper cleanup.
 - `restore.sh` - Snapshot list/mount/unmount and manual-package replay helper.
+- `upgrade.sh` - Syncs installed suite files/systemd units to match this checkout.
+- `version` - Suite version; compared against `/etc/pbs-backup/version` by upgrade.sh.
 
 ## Config file
 
@@ -68,6 +70,35 @@ Ubuntu 22.04 note:
 
 - Dynamic `proxmox-backup-client` may not resolve on Jammy due newer shared library requirements.
 - The installer uses `proxmox-backup-client-static` by default on Jammy to avoid that dependency mismatch.
+
+## Upgrade
+
+Once a VM has been installed, pull/checkout the version of this repo you
+want to deploy, then run as root:
+
+```bash
+./upgrade.sh
+```
+
+This compares this checkout's `version` file against `/etc/pbs-backup/version`
+and, if they differ, re-syncs `run-backup.sh`, `config.example`, the repo's
+`pre-backup.d`/`post-backup.d` hooks, and the systemd units from this
+checkout into place, then reloads systemd. It does not touch
+`/etc/pbs-backup/config`, the APT repo, or the installed
+`proxmox-backup-client` package — rerun `install.sh` for those. Host-specific
+hooks dropped into `pre-backup.d`/`post-backup.d` that aren't part of this
+repo are left alone.
+
+Options:
+
+```bash
+./upgrade.sh --force      # reinstall files even if versions already match
+./upgrade.sh --no-backup  # skip backing up replaced files first
+./upgrade.sh -y           # skip the confirmation prompt
+```
+
+Replaced files are backed up to a timestamped directory under
+`/etc/pbs-backup/.upgrade-backups/` unless `--no-backup` is used.
 
 ## Uninstall
 
