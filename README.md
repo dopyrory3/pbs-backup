@@ -67,6 +67,28 @@ Ubuntu 22.04 note:
 - Dynamic `proxmox-backup-client` may not resolve on Jammy due newer shared library requirements.
 - The installer uses `proxmox-backup-client-static` by default on Jammy to avoid that dependency mismatch.
 
+## Uninstall
+
+Run on a VM as root:
+
+```bash
+./uninstall.sh
+```
+
+By default this only removes what's safe to remove unconditionally: the
+`pbs-backup.timer`/`pbs-backup.service` systemd units and the suite's own
+scripts in `/etc/pbs-backup`. It preserves `/etc/pbs-backup/config`, package
+manifests, and the dump directory.
+
+Options:
+
+```bash
+./uninstall.sh --purge            # also remove config, manifests, and DUMP_DIR
+./uninstall.sh --remove-package   # also apt-get remove proxmox-backup-client(-static)
+./uninstall.sh --remove-repo      # also remove the PBS client APT repo and release key
+./uninstall.sh -y                 # skip confirmation prompts
+```
+
 ## Backup behavior
 
 `run-backup.sh` does the following:
