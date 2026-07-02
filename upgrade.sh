@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -t 1 && -z "${NO_COLOR:-}" && "${TERM:-}" != "dumb" ]]; then
+  C_BOLD=$'\033[1m'; C_RED=$'\033[31m'; C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'; C_RESET=$'\033[0m'
+else
+  C_BOLD=''; C_RED=''; C_GREEN=''; C_YELLOW=''; C_CYAN=''; C_RESET=''
+fi
+
+# When invoked as `pbs upgrade ...`, the pbs dispatcher sets PBS_CMD_NAME so
+# usage/help text points users back at the pbs subcommand, not this filename.
+PROG="${PBS_CMD_NAME:-$(basename "$0")}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DIR="/etc/pbs-backup"
 
@@ -8,9 +19,14 @@ FORCE=0
 ASSUME_YES=0
 NO_BACKUP=0
 
+step() { echo "${C_CYAN}${C_BOLD}$*${C_RESET}"; }
+warn() { echo "${C_YELLOW}Warning:${C_RESET} $*" >&2; }
+err() { echo "${C_RED}Error:${C_RESET} $*" >&2; }
+ok() { echo "${C_GREEN}$*${C_RESET}"; }
+
 usage() {
-  cat <<'EOF'
-Usage: upgrade.sh [OPTIONS]
+  cat <<EOF
+${C_BOLD}Usage:${C_RESET} ${PROG} [OPTIONS]
 
 Updates the files under /etc/pbs-backup and the systemd units to match
 what's in this repo checkout (SCRIPT_DIR), the same way install.sh does
@@ -20,12 +36,12 @@ deploy before running this script.
 Never touches /etc/pbs-backup/config, the APT repo, or the installed
 proxmox-backup-client package -- use install.sh for those.
 
-Options:
-  --force      Reinstall files even if the installed version already
+${C_BOLD}Options:${C_RESET}
+  ${C_CYAN}--force${C_RESET}      Reinstall files even if the installed version already
                matches the repo version.
-  --no-backup  Skip backing up replaced files before overwriting them.
-  -y, --yes    Do not prompt for confirmation.
-  -h, --help   Show this help.
+  ${C_CYAN}--no-backup${C_RESET}  Skip backing up replaced files before overwriting them.
+  ${C_CYAN}-y, --yes${C_RESET}    Do not prompt for confirmation.
+  ${C_CYAN}-h, --help${C_RESET}   Show this help.
 EOF
 }
 
@@ -36,7 +52,7 @@ for arg in "$@"; do
     -y|--yes) ASSUME_YES=1 ;;
     -h|--help) usage; exit 0 ;;
     *)
-      echo "Unknown option: $arg" >&2
+      err "Unknown option: $arg"
       usage >&2
       exit 1
       ;;
@@ -44,12 +60,12 @@ for arg in "$@"; do
 done
 
 if [[ "${EUID}" -ne 0 ]]; then
-  echo "Run this upgrader as root."
+  err "Run this upgrader as root."
   exit 1
 fi
 
 if [[ ! -d "$TARGET_DIR" ]]; then
-  echo "${TARGET_DIR} not found; nothing to upgrade. Run install.sh first."
+  err "${TARGET_DIR} not found; nothing to upgrade. Run install.sh first."
   exit 1
 fi
 
@@ -63,11 +79,11 @@ if [[ -f "${TARGET_DIR}/version" ]]; then
   INSTALLED_VERSION="$(<"${TARGET_DIR}/version")"
 fi
 
-echo "Installed version: ${INSTALLED_VERSION}"
-echo "Repo version:       ${REPO_VERSION}"
+echo "Installed version: ${C_BOLD}${INSTALLED_VERSION}${C_RESET}"
+echo "Repo version:       ${C_BOLD}${REPO_VERSION}${C_RESET}"
 
 if [[ "$INSTALLED_VERSION" == "$REPO_VERSION" && "$REPO_VERSION" != "unknown" && "$FORCE" -ne 1 ]]; then
-  echo "Already up to date. Use --force to reinstall files anyway."
+  ok "Already up to date. Use --force to reinstall files anyway."
   exit 0
 fi
 
@@ -77,12 +93,12 @@ if [[ "$ASSUME_YES" -ne 1 ]]; then
 fi
 
 if systemctl is-active --quiet pbs-backup.service; then
-  echo "Warning: pbs-backup.service is currently running a backup; files will still be replaced."
+  warn "pbs-backup.service is currently running a backup; files will still be replaced."
 fi
 
 if [[ "$NO_BACKUP" -ne 1 ]]; then
   BACKUP_DIR="${TARGET_DIR}/.upgrade-backups/$(date +%Y%m%d%H%M%S)"
-  echo "[1/4] Backing up current suite files to ${BACKUP_DIR}"
+  step "[1/4] Backing up current suite files to ${BACKUP_DIR}"
   install -d -m 0700 "$BACKUP_DIR"
   for f in run-backup.sh config.example restore.sh uninstall.sh upgrade.sh pbs; do
     [[ -f "${TARGET_DIR}/${f}" ]] && cp -a "${TARGET_DIR}/${f}" "${BACKUP_DIR}/"
@@ -93,10 +109,10 @@ if [[ "$NO_BACKUP" -ne 1 ]]; then
     [[ -f "$f" ]] && cp -a "$f" "${BACKUP_DIR}/"
   done
 else
-  echo "[1/4] Skipping backup (--no-backup)"
+  step "[1/4] Skipping backup (--no-backup)"
 fi
 
-echo "[2/4] Syncing suite scripts into ${TARGET_DIR}"
+step "[2/4] Syncing suite scripts into ${TARGET_DIR}"
 # install(1) unlinks the destination before writing, so it's safe even when
 # overwriting the copy of this very script at ${TARGET_DIR}/upgrade.sh mid-run.
 install -d -m 0755 "${TARGET_DIR}/pre-backup.d"
@@ -122,16 +138,16 @@ shopt -u nullglob
 
 ln -sf "${TARGET_DIR}/pbs" /usr/local/bin/pbs
 
-echo "[3/4] Syncing systemd units"
+step "[3/4] Syncing systemd units"
 install -m 0644 "${SCRIPT_DIR}/deploy/pbs-backup.service" "/etc/systemd/system/pbs-backup.service"
 install -m 0644 "${SCRIPT_DIR}/deploy/pbs-backup.timer" "/etc/systemd/system/pbs-backup.timer"
 systemctl daemon-reload
 systemctl enable --now pbs-backup.timer
 
-echo "[4/4] Recording installed version"
+step "[4/4] Recording installed version"
 if [[ -f "${SCRIPT_DIR}/version" ]]; then
   install -m 0644 "${SCRIPT_DIR}/version" "${TARGET_DIR}/version"
 fi
 
-echo "Upgrade complete: ${INSTALLED_VERSION} -> ${REPO_VERSION}"
+ok "Upgrade complete: ${INSTALLED_VERSION} -> ${REPO_VERSION}"
 echo "Config at ${TARGET_DIR}/config was not touched."

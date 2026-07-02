@@ -1,47 +1,62 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -t 1 && -z "${NO_COLOR:-}" && "${TERM:-}" != "dumb" ]]; then
+  C_BOLD=$'\033[1m'; C_RED=$'\033[31m'; C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'; C_RESET=$'\033[0m'
+else
+  C_BOLD=''; C_RED=''; C_GREEN=''; C_YELLOW=''; C_CYAN=''; C_RESET=''
+fi
+
+# When invoked as `pbs restore ...`, the pbs dispatcher sets PBS_CMD_NAME so
+# usage/help text points users back at the pbs subcommand, not this filename.
+PROG="${PBS_CMD_NAME:-$(basename "$0")}"
+
 CONFIG_FILE="/etc/pbs-backup/config"
 DEFAULT_MOUNTPOINT="/mnt/restore"
 ARCHIVE="root.pxar"
 
-usage() {
-  cat <<'EOF'
-Usage: restore.sh <command> [args]
+warn() { echo "${C_YELLOW}Warning:${C_RESET} $*" >&2; }
+err() { echo "${C_RED}Error:${C_RESET} $*" >&2; }
+ok() { echo "${C_GREEN}$*${C_RESET}"; }
 
-Commands:
-  list                          List snapshots in the configured PBS repository.
-  mount [snapshot] [mountpoint] Mount a snapshot (default archive: root.pxar).
+usage() {
+  cat <<EOF
+${C_BOLD}Usage:${C_RESET} ${PROG} <command> [args]
+
+${C_BOLD}Commands:${C_RESET}
+  ${C_CYAN}list${C_RESET}                          List snapshots in the configured PBS repository.
+  ${C_CYAN}mount${C_RESET} [snapshot] [mountpoint] Mount a snapshot (default archive: root.pxar).
                                  Omit snapshot to pick from an interactive list.
                                  Default mountpoint: /mnt/restore
-  unmount [mountpoint]          Unmount a previously mounted snapshot.
+  ${C_CYAN}unmount${C_RESET} [mountpoint]          Unmount a previously mounted snapshot.
                                  Default mountpoint: /mnt/restore
-  packages [manifest]           Reinstall manually-installed packages from a
+  ${C_CYAN}packages${C_RESET} [manifest]           Reinstall manually-installed packages from a
                                  manual-packages.txt manifest. Defaults to
                                  <mountpoint>/etc/pbs-backup/manual-packages.txt
                                  if a snapshot is mounted there, else falls
                                  back to /etc/pbs-backup/manual-packages.txt.
-  status [mountpoint]           Show whether a restore mount is active.
+  ${C_CYAN}status${C_RESET} [mountpoint]           Show whether a restore mount is active.
 
-Examples:
-  ./restore.sh list
-  ./restore.sh mount                        # pick a snapshot interactively
-  ./restore.sh mount host/myhost/2026-07-01T03:12:45Z
-  ./restore.sh packages
-  ./restore.sh unmount
+${C_BOLD}Examples:${C_RESET}
+  ${PROG} list
+  ${PROG} mount                        # pick a snapshot interactively
+  ${PROG} mount host/myhost/2026-07-01T03:12:45Z
+  ${PROG} packages
+  ${PROG} unmount
 EOF
 }
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
-    echo "Run this command as root." >&2
+    err "Run this command as root."
     exit 1
   fi
 }
 
 load_config() {
   if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "Missing config file: ${CONFIG_FILE}" >&2
+    err "Missing config file: ${CONFIG_FILE}"
     exit 1
   fi
   # shellcheck source=/etc/pbs-backup/config
@@ -61,8 +76,8 @@ cmd_list() {
 # IDs (list's human table wraps/truncates columns), so this shells out to jq.
 select_snapshot() {
   if ! command -v jq >/dev/null 2>&1; then
-    echo "jq is required for interactive snapshot selection (apt-get install jq)." >&2
-    echo "Alternatively, run '$0 list' and pass a snapshot ID to '$0 mount' directly." >&2
+    err "jq is required for interactive snapshot selection (apt-get install jq)."
+    echo "Alternatively, run '${PROG} list' and pass a snapshot ID to '${PROG} mount' directly." >&2
     exit 1
   fi
 
@@ -72,7 +87,7 @@ select_snapshot() {
   local count
   count="$(jq 'length' <<<"$json")"
   if [[ "$count" -eq 0 ]]; then
-    echo "No snapshots found in ${PBS_REPOSITORY}." >&2
+    err "No snapshots found in ${PBS_REPOSITORY}."
     exit 1
   fi
 
@@ -88,15 +103,15 @@ select_snapshot() {
     labels+=("${btype}/${bid}/${iso}")
   done
 
-  echo "Available snapshots:" >&2
+  echo "${C_BOLD}Available snapshots:${C_RESET}" >&2
   local sel
-  PS3="Select a snapshot to mount: "
+  PS3="${C_CYAN}Select a snapshot to mount:${C_RESET} "
   select sel in "${labels[@]}"; do
     if [[ -n "${sel:-}" ]]; then
       echo "${ids[$((REPLY - 1))]}"
       return 0
     fi
-    echo "Invalid selection, try again." >&2
+    warn "Invalid selection, try again."
   done
 }
 
@@ -110,24 +125,24 @@ cmd_mount() {
   fi
 
   if mountpoint -q "$mountpoint" 2>/dev/null; then
-    echo "${mountpoint} is already a mount point; unmount it first." >&2
+    err "${mountpoint} is already a mount point; unmount it first."
     exit 1
   fi
 
   mkdir -p "$mountpoint"
-  echo "Mounting ${snapshot} (${ARCHIVE}) at ${mountpoint}"
+  echo "${C_CYAN}Mounting ${snapshot} (${ARCHIVE}) at ${mountpoint}${C_RESET}"
   proxmox-backup-client mount "$snapshot" "$ARCHIVE" "$mountpoint"
-  echo "Mounted. Unmount later with: $0 unmount ${mountpoint}"
+  ok "Mounted. Unmount later with: ${PROG} unmount ${mountpoint}"
 }
 
 cmd_unmount() {
   local mountpoint="${1:-$DEFAULT_MOUNTPOINT}"
   if ! mountpoint -q "$mountpoint" 2>/dev/null; then
-    echo "${mountpoint} is not currently mounted." >&2
+    err "${mountpoint} is not currently mounted."
     exit 1
   fi
   proxmox-backup-client unmount "$mountpoint"
-  echo "Unmounted ${mountpoint}"
+  ok "Unmounted ${mountpoint}"
 }
 
 cmd_packages() {
@@ -139,14 +154,14 @@ cmd_packages() {
     elif [[ -f /etc/pbs-backup/manual-packages.txt ]]; then
       manifest="/etc/pbs-backup/manual-packages.txt"
     else
-      echo "No manifest found at ${DEFAULT_MOUNTPOINT}/etc/pbs-backup/manual-packages.txt" >&2
+      err "No manifest found at ${DEFAULT_MOUNTPOINT}/etc/pbs-backup/manual-packages.txt"
       echo "or /etc/pbs-backup/manual-packages.txt. Pass a path explicitly." >&2
       exit 1
     fi
   fi
 
   if [[ ! -f "$manifest" ]]; then
-    echo "Manifest not found: ${manifest}" >&2
+    err "Manifest not found: ${manifest}"
     exit 1
   fi
 
@@ -164,7 +179,7 @@ cmd_packages() {
 cmd_status() {
   local mountpoint="${1:-$DEFAULT_MOUNTPOINT}"
   if mountpoint -q "$mountpoint" 2>/dev/null; then
-    echo "${mountpoint} is mounted."
+    ok "${mountpoint} is mounted."
   else
     echo "${mountpoint} is not mounted."
   fi
@@ -181,7 +196,7 @@ case "$command" in
   status) cmd_status "$@" ;;
   -h|--help|"") usage ;;
   *)
-    echo "Unknown command: ${command}" >&2
+    err "Unknown command: ${command}"
     usage >&2
     exit 1
     ;;

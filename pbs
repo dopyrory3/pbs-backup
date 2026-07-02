@@ -1,23 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -t 1 && -z "${NO_COLOR:-}" && "${TERM:-}" != "dumb" ]]; then
+  C_BOLD=$'\033[1m'; C_RED=$'\033[31m'; C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'; C_RESET=$'\033[0m'
+else
+  C_BOLD=''; C_RED=''; C_GREEN=''; C_YELLOW=''; C_CYAN=''; C_RESET=''
+fi
+
+warn() { echo "${C_YELLOW}Warning:${C_RESET} $*" >&2; }
+err() { echo "${C_RED}Error:${C_RESET} $*" >&2; }
+
 TARGET_DIR="/etc/pbs-backup"
 UPGRADE_REPO="${PBS_UPGRADE_REPO:-https://github.com/dopyrory3/pbs-backup}"
 UPGRADE_REF="${PBS_UPGRADE_REF:-main}"
 
 usage() {
   cat <<EOF
-Usage: pbs <command> [args]
+${C_BOLD}Usage:${C_RESET} pbs <command> [args]
 
-Commands:
-  run-backup [args]        Run a backup now (wraps run-backup.sh).
-  restore <args>            Snapshot list/mount/unmount/packages (wraps restore.sh).
-  upgrade [-y] [--force]    Fetch ${UPGRADE_REPO}@${UPGRADE_REF} into a temp
+${C_BOLD}Commands:${C_RESET}
+  ${C_CYAN}run-backup${C_RESET} [args]        Run a backup now (wraps run-backup.sh).
+  ${C_CYAN}restore${C_RESET} <args>            Snapshot list/mount/unmount/packages (wraps restore.sh).
+  ${C_CYAN}upgrade${C_RESET} [-y] [--force]    Fetch ${UPGRADE_REPO}@${UPGRADE_REF} into a temp
                              dir and run its upgrade.sh against this host.
-  upgrade --local <dir>    Upgrade from an existing checkout instead of
+  ${C_CYAN}upgrade --local${C_RESET} <dir>    Upgrade from an existing checkout instead of
                              fetching from GitHub.
-  uninstall [args]          Remove the suite from this host (wraps uninstall.sh).
-  help                      Show this help.
+  ${C_CYAN}uninstall${C_RESET} [args]          Remove the suite from this host (wraps uninstall.sh).
+  ${C_CYAN}help${C_RESET}                      Show this help.
 
 Env overrides for 'upgrade': PBS_UPGRADE_REPO, PBS_UPGRADE_REF (branch, tag,
 or commit).
@@ -26,14 +36,14 @@ EOF
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
-    echo "Run this command as root." >&2
+    err "Run this command as root."
     exit 1
   fi
 }
 
 require_installed() {
   if [[ ! -d "$TARGET_DIR" ]]; then
-    echo "${TARGET_DIR} not found. Run install.sh from a checkout first." >&2
+    err "${TARGET_DIR} not found. Run install.sh from a checkout first."
     exit 1
   fi
 }
@@ -41,26 +51,26 @@ require_installed() {
 cmd_run_backup() {
   require_root
   require_installed
-  exec "${TARGET_DIR}/run-backup.sh" "$@"
+  PBS_CMD_NAME="pbs run-backup" exec "${TARGET_DIR}/run-backup.sh" "$@"
 }
 
 cmd_restore() {
   require_root
   require_installed
-  exec "${TARGET_DIR}/restore.sh" "$@"
+  PBS_CMD_NAME="pbs restore" exec "${TARGET_DIR}/restore.sh" "$@"
 }
 
 cmd_uninstall() {
   require_root
   require_installed
-  exec "${TARGET_DIR}/uninstall.sh" "$@"
+  PBS_CMD_NAME="pbs uninstall" exec "${TARGET_DIR}/uninstall.sh" "$@"
 }
 
 fetch_and_upgrade() {
   require_root
 
-  echo "This will download and run code as root from:"
-  echo "  ${UPGRADE_REPO} (ref: ${UPGRADE_REF})"
+  echo "${C_YELLOW}This will download and run code as root from:${C_RESET}"
+  echo "  ${C_BOLD}${UPGRADE_REPO}${C_RESET} (ref: ${UPGRADE_REF})"
   local assume_yes=0
   for a in "$@"; do
     [[ "$a" == "-y" || "$a" == "--yes" ]] && assume_yes=1
@@ -85,11 +95,11 @@ fetch_and_upgrade() {
   fi
 
   if [[ ! -x "$tmp/src/upgrade.sh" ]]; then
-    echo "Fetched source doesn't contain an executable upgrade.sh; aborting." >&2
+    err "Fetched source doesn't contain an executable upgrade.sh; aborting."
     exit 1
   fi
 
-  "$tmp/src/upgrade.sh" "$@"
+  PBS_CMD_NAME="pbs upgrade" "$tmp/src/upgrade.sh" "$@"
 }
 
 cmd_upgrade() {
@@ -98,11 +108,11 @@ cmd_upgrade() {
     shift
     local checkout="${1:-}"
     if [[ -z "$checkout" || ! -x "${checkout}/upgrade.sh" ]]; then
-      echo "Usage: pbs upgrade --local <checkout-dir-containing-upgrade.sh>" >&2
+      err "Usage: pbs upgrade --local <checkout-dir-containing-upgrade.sh>"
       exit 1
     fi
     shift
-    exec "${checkout}/upgrade.sh" "$@"
+    PBS_CMD_NAME="pbs upgrade" exec "${checkout}/upgrade.sh" "$@"
   fi
   fetch_and_upgrade "$@"
 }
@@ -117,7 +127,7 @@ case "$command" in
   uninstall) cmd_uninstall "$@" ;;
   -h|--help|help|"") usage ;;
   *)
-    echo "Unknown command: ${command}" >&2
+    err "Unknown command: ${command}"
     usage >&2
     exit 1
     ;;
