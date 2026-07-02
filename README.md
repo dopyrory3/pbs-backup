@@ -15,6 +15,7 @@ The same code is deployed to every VM. Only `/etc/pbs-backup/config` is per-VM.
 - `uninstall.sh` - Removes what install.sh added, with opt-in flags for deeper cleanup.
 - `restore.sh` - Snapshot list/mount/unmount and manual-package replay helper.
 - `upgrade.sh` - Syncs installed suite files/systemd units to match this checkout.
+- `pbs` - Command dispatcher (`pbs run-backup|restore|upgrade|uninstall`); symlinked onto PATH by install.sh.
 - `version` - Suite version; compared against `/etc/pbs-backup/version` by upgrade.sh.
 
 ## Config file
@@ -73,10 +74,32 @@ Ubuntu 22.04 note:
 - Dynamic `proxmox-backup-client` may not resolve on Jammy due newer shared library requirements.
 - The installer uses `proxmox-backup-client-static` by default on Jammy to avoid that dependency mismatch.
 
+## The `pbs` command
+
+`install.sh` deploys `pbs` to `/etc/pbs-backup/pbs` and symlinks it to
+`/usr/local/bin/pbs`, so it's a normal command on any installed VM:
+
+```bash
+pbs run-backup            # run a backup now
+pbs restore list           # ...and any other restore.sh subcommand
+pbs uninstall --purge      # ...and any other uninstall.sh flag
+pbs upgrade                 # fetch the latest suite from GitHub and upgrade
+pbs upgrade --local <dir>   # upgrade from an existing checkout instead
+```
+
+`pbs upgrade` clones (or, if `git` isn't installed, downloads a tarball of)
+`https://github.com/dopyrory3/pbs-backup` at ref `main` into a temp directory
+under `/tmp`, prompts for confirmation before running anything (skip with
+`-y`), then runs that checkout's `upgrade.sh` against this host. Override the
+source with `PBS_UPGRADE_REPO` / `PBS_UPGRADE_REF` env vars, e.g. to pin a
+tag or point at a fork. This downloads and executes code as root, so only
+point it at a repo/ref you trust.
+
 ## Upgrade
 
-Once a VM has been installed, pull/checkout the version of this repo you
-want to deploy, then run as root:
+`pbs upgrade` (above) is the normal path. To run `upgrade.sh` directly from
+a checkout instead — for example while developing this repo — pull/checkout
+the version of this repo you want to deploy, then run as root:
 
 ```bash
 ./upgrade.sh

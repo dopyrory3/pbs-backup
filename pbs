@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TARGET_DIR="/etc/pbs-backup"
+UPGRADE_REPO="${PBS_UPGRADE_REPO:-https://github.com/dopyrory3/pbs-backup}"
+UPGRADE_REF="${PBS_UPGRADE_REF:-main}"
+
+usage() {
+  cat <<EOF
+Usage: pbs <command> [args]
+
+Commands:
+  run-backup [args]        Run a backup now (wraps run-backup.sh).
+  restore <args>            Snapshot list/mount/unmount/packages (wraps restore.sh).
+  upgrade [-y] [--force]    Fetch ${UPGRADE_REPO}@${UPGRADE_REF} into a temp
+                             dir and run its upgrade.sh against this host.
+  upgrade --local <dir>    Upgrade from an existing checkout instead of
+                             fetching from GitHub.
+  uninstall [args]          Remove the suite from this host (wraps uninstall.sh).
+  help                      Show this help.
+
+Env overrides for 'upgrade': PBS_UPGRADE_REPO, PBS_UPGRADE_REF (branch, tag,
+or commit).
+EOF
+}
+
+require_root() {
+  if [[ "${EUID}" -ne 0 ]]; then
+    echo "Run this command as root." >&2
+    exit 1
+  fi
+}
+
+require_installed() {
+  if [[ ! -d "$TARGET_DIR" ]]; then
+    echo "${TARGET_DIR} not found. Run install.sh from a checkout first." >&2
+    exit 1
+  fi
+}
+
+cmd_run_backup() {
+  require_root
+  require_installed
+  exec "${TARGET_DIR}/run-backup.sh" "$@"
+}
+
+cmd_restore() {
+  require_root
+  require_installed
+  exec "${TARGET_DIR}/restore.sh" "$@"
+}
+
+cmd_uninstall() {
+  require_root
+  require_installed
+  exec "${TARGET_DIR}/uninstall.sh" "$@"
+}
+
+fetch_and_upgrade() {
+  require_root
+
+  echo "This will download and run code as root from:"
+  echo "  ${UPGRADE_REPO} (ref: ${UPGRADE_REF})"
+  local assume_yes=0
+  for a in "$@"; do
+    [[ "$a" == "-y" || "$a" == "--yes" ]] && assume_yes=1
+  done
+  if [[ "$assume_yes" -ne 1 ]]; then
+    read -r -p "Continue? [y/N] " reply
+    [[ "$reply" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+  fi
+
+  local tmp
+  tmp="$(mktemp -d /tmp/pbs-upgrade.XXXXXX)"
+  trap 'rm -rf "$tmp"' EXIT
+
+  if command -v git >/dev/null 2>&1; then
+    echo "Fetching ${UPGRADE_REPO}@${UPGRADE_REF} with git..."
+    git clone --quiet --depth 1 --branch "$UPGRADE_REF" "$UPGRADE_REPO" "$tmp/src"
+  else
+    echo "git not found; fetching tarball with curl..."
+    curl -fsSL "${UPGRADE_REPO}/archive/${UPGRADE_REF}.tar.gz" -o "$tmp/src.tar.gz"
+    mkdir -p "$tmp/src"
+    tar -xzf "$tmp/src.tar.gz" -C "$tmp/src" --strip-components=1
+  fi
+
+  if [[ ! -x "$tmp/src/upgrade.sh" ]]; then
+    echo "Fetched source doesn't contain an executable upgrade.sh; aborting." >&2
+    exit 1
+  fi
+
+  "$tmp/src/upgrade.sh" "$@"
+}
+
+cmd_upgrade() {
+  require_root
+  if [[ "${1:-}" == "--local" ]]; then
+    shift
+    local checkout="${1:-}"
+    if [[ -z "$checkout" || ! -x "${checkout}/upgrade.sh" ]]; then
+      echo "Usage: pbs upgrade --local <checkout-dir-containing-upgrade.sh>" >&2
+      exit 1
+    fi
+    shift
+    exec "${checkout}/upgrade.sh" "$@"
+  fi
+  fetch_and_upgrade "$@"
+}
+
+command="${1:-}"
+[[ $# -gt 0 ]] && shift
+
+case "$command" in
+  run-backup) cmd_run_backup "$@" ;;
+  restore) cmd_restore "$@" ;;
+  upgrade) cmd_upgrade "$@" ;;
+  uninstall) cmd_uninstall "$@" ;;
+  -h|--help|help|"") usage ;;
+  *)
+    echo "Unknown command: ${command}" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

@@ -130,12 +130,15 @@ install -m 0755 "${SCRIPT_DIR}/run-backup.sh" "${TARGET_DIR}/run-backup.sh"
 install -m 0755 "${SCRIPT_DIR}/restore.sh" "${TARGET_DIR}/restore.sh"
 install -m 0755 "${SCRIPT_DIR}/uninstall.sh" "${TARGET_DIR}/uninstall.sh"
 install -m 0755 "${SCRIPT_DIR}/upgrade.sh" "${TARGET_DIR}/upgrade.sh"
+install -m 0755 "${SCRIPT_DIR}/pbs" "${TARGET_DIR}/pbs"
 install -m 0644 "${SCRIPT_DIR}/config.example" "${TARGET_DIR}/config.example"
 install -m 0755 "${SCRIPT_DIR}/pre-backup.d/10-marker.sh" "${TARGET_DIR}/pre-backup.d/10-marker.sh"
 install -m 0755 "${SCRIPT_DIR}/post-backup.d/90-cleanup-dumps.sh" "${TARGET_DIR}/post-backup.d/90-cleanup-dumps.sh"
 if [[ -f "${SCRIPT_DIR}/version" ]]; then
   install -m 0644 "${SCRIPT_DIR}/version" "${TARGET_DIR}/version"
 fi
+
+ln -sf "${TARGET_DIR}/pbs" /usr/local/bin/pbs
 
 if [[ -f "${TARGET_DIR}/config" ]]; then
   echo "[3/6] Preserving existing ${TARGET_DIR}/config"
@@ -160,7 +163,9 @@ Next steps:
 2. Run a connectivity smoke test backup:
    proxmox-backup-client backup etc.pxar:/etc
 3. Run a full backup manually once:
-   /etc/pbs-backup/run-backup.sh
+   pbs run-backup
 4. Check logs:
    journalctl -t pbs-backup -n 200 --no-pager
+
+The 'pbs' command is now on your PATH (run-backup, restore, upgrade, uninstall).
 EOF

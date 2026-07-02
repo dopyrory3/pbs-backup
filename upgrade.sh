@@ -84,7 +84,7 @@ if [[ "$NO_BACKUP" -ne 1 ]]; then
   BACKUP_DIR="${TARGET_DIR}/.upgrade-backups/$(date +%Y%m%d%H%M%S)"
   echo "[1/4] Backing up current suite files to ${BACKUP_DIR}"
   install -d -m 0700 "$BACKUP_DIR"
-  for f in run-backup.sh config.example restore.sh uninstall.sh upgrade.sh; do
+  for f in run-backup.sh config.example restore.sh uninstall.sh upgrade.sh pbs; do
     [[ -f "${TARGET_DIR}/${f}" ]] && cp -a "${TARGET_DIR}/${f}" "${BACKUP_DIR}/"
   done
   [[ -d "${TARGET_DIR}/pre-backup.d" ]] && cp -a "${TARGET_DIR}/pre-backup.d" "${BACKUP_DIR}/"
@@ -106,6 +106,7 @@ install -m 0755 "${SCRIPT_DIR}/run-backup.sh" "${TARGET_DIR}/run-backup.sh"
 install -m 0755 "${SCRIPT_DIR}/restore.sh" "${TARGET_DIR}/restore.sh"
 install -m 0755 "${SCRIPT_DIR}/uninstall.sh" "${TARGET_DIR}/uninstall.sh"
 install -m 0755 "${SCRIPT_DIR}/upgrade.sh" "${TARGET_DIR}/upgrade.sh"
+install -m 0755 "${SCRIPT_DIR}/pbs" "${TARGET_DIR}/pbs"
 install -m 0644 "${SCRIPT_DIR}/config.example" "${TARGET_DIR}/config.example"
 
 # Sync every hook the repo ships, without touching host-specific hooks that
@@ -118,6 +119,8 @@ for hook in "${SCRIPT_DIR}"/post-backup.d/*.sh; do
   install -m 0755 "$hook" "${TARGET_DIR}/post-backup.d/$(basename "$hook")"
 done
 shopt -u nullglob
+
+ln -sf "${TARGET_DIR}/pbs" /usr/local/bin/pbs
 
 echo "[3/4] Syncing systemd units"
 install -m 0644 "${SCRIPT_DIR}/deploy/pbs-backup.service" "/etc/systemd/system/pbs-backup.service"

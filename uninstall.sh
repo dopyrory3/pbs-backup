@@ -76,10 +76,15 @@ rm -f \
   "${TARGET_DIR}/restore.sh" \
   "${TARGET_DIR}/uninstall.sh" \
   "${TARGET_DIR}/upgrade.sh" \
+  "${TARGET_DIR}/pbs" \
   "${TARGET_DIR}/config.example" \
   "${TARGET_DIR}/pre-backup.d/10-marker.sh" \
   "${TARGET_DIR}/post-backup.d/90-cleanup-dumps.sh"
 rmdir --ignore-fail-on-non-empty "${TARGET_DIR}/pre-backup.d" "${TARGET_DIR}/post-backup.d" 2>/dev/null || true
+
+if [[ -L /usr/local/bin/pbs && "$(readlink /usr/local/bin/pbs)" == "${TARGET_DIR}/pbs" ]]; then
+  rm -f /usr/local/bin/pbs
+fi
 
 if [[ "$PURGE" -eq 1 ]]; then
   DUMP_DIR="/var/backups/pbs-dumps"
