@@ -84,7 +84,7 @@ if [[ "$NO_BACKUP" -ne 1 ]]; then
   BACKUP_DIR="${TARGET_DIR}/.upgrade-backups/$(date +%Y%m%d%H%M%S)"
   echo "[1/4] Backing up current suite files to ${BACKUP_DIR}"
   install -d -m 0700 "$BACKUP_DIR"
-  for f in run-backup.sh config.example; do
+  for f in run-backup.sh config.example restore.sh uninstall.sh upgrade.sh; do
     [[ -f "${TARGET_DIR}/${f}" ]] && cp -a "${TARGET_DIR}/${f}" "${BACKUP_DIR}/"
   done
   [[ -d "${TARGET_DIR}/pre-backup.d" ]] && cp -a "${TARGET_DIR}/pre-backup.d" "${BACKUP_DIR}/"
@@ -97,10 +97,15 @@ else
 fi
 
 echo "[2/4] Syncing suite scripts into ${TARGET_DIR}"
+# install(1) unlinks the destination before writing, so it's safe even when
+# overwriting the copy of this very script at ${TARGET_DIR}/upgrade.sh mid-run.
 install -d -m 0755 "${TARGET_DIR}/pre-backup.d"
 install -d -m 0755 "${TARGET_DIR}/post-backup.d"
 
 install -m 0755 "${SCRIPT_DIR}/run-backup.sh" "${TARGET_DIR}/run-backup.sh"
+install -m 0755 "${SCRIPT_DIR}/restore.sh" "${TARGET_DIR}/restore.sh"
+install -m 0755 "${SCRIPT_DIR}/uninstall.sh" "${TARGET_DIR}/uninstall.sh"
+install -m 0755 "${SCRIPT_DIR}/upgrade.sh" "${TARGET_DIR}/upgrade.sh"
 install -m 0644 "${SCRIPT_DIR}/config.example" "${TARGET_DIR}/config.example"
 
 # Sync every hook the repo ships, without touching host-specific hooks that

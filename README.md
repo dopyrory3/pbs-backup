@@ -50,7 +50,9 @@ Installer actions:
 1. Detects Ubuntu release and validates support (`22.04`, `24.04`, `26.04`).
 2. Adds the PBS client APT repo (default suite `bookworm`) and release key.
 3. Installs `proxmox-backup-client-static` on Ubuntu 22.04, otherwise `proxmox-backup-client`.
-4. Installs files into `/etc/pbs-backup`.
+4. Installs files into `/etc/pbs-backup`, including `restore.sh`, `uninstall.sh`,
+   and `upgrade.sh` themselves — the VM is self-contained afterwards and
+   doesn't depend on this checkout sticking around.
 5. Preserves existing `/etc/pbs-backup/config`.
 6. Installs and enables `pbs-backup.timer`.
 
@@ -80,6 +82,11 @@ want to deploy, then run as root:
 ./upgrade.sh
 ```
 
+This can also be run as `/etc/pbs-backup/upgrade.sh`, since install.sh deploys
+it there — though it only ever syncs *from* whatever checkout you invoke it
+from, so run it from an up-to-date checkout, not the installed copy, when
+picking up a new version.
+
 This compares this checkout's `version` file against `/etc/pbs-backup/version`
 and, if they differ, re-syncs `run-backup.sh`, `config.example`, the repo's
 `pre-backup.d`/`post-backup.d` hooks, and the systemd units from this
@@ -107,6 +114,8 @@ Run on a VM as root:
 ```bash
 ./uninstall.sh
 ```
+
+Also available as `/etc/pbs-backup/uninstall.sh` on any installed VM.
 
 By default this only removes what's safe to remove unconditionally: the
 `pbs-backup.timer`/`pbs-backup.service` systemd units and the suite's own
@@ -216,7 +225,9 @@ systemctl list-timers pbs-backup.timer
 ## Restore basics
 
 `restore.sh` wraps the common restore steps. It sources `/etc/pbs-backup/config`
-for repository credentials, same as `run-backup.sh`.
+for repository credentials, same as `run-backup.sh`. It's also available at
+`/etc/pbs-backup/restore.sh` on any installed VM, so it works even without
+this checkout present.
 
 ```bash
 ./restore.sh list                # list snapshots in the configured repository

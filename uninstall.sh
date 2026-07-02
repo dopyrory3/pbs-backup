@@ -69,8 +69,13 @@ rm -f /etc/systemd/system/pbs-backup.service /etc/systemd/system/pbs-backup.time
 systemctl daemon-reload
 
 echo "[3/5] Removing installed scripts from ${TARGET_DIR}"
+# rm unlinks rather than truncating, so this is safe even when removing the
+# copy of this very script at ${TARGET_DIR}/uninstall.sh mid-run.
 rm -f \
   "${TARGET_DIR}/run-backup.sh" \
+  "${TARGET_DIR}/restore.sh" \
+  "${TARGET_DIR}/uninstall.sh" \
+  "${TARGET_DIR}/upgrade.sh" \
   "${TARGET_DIR}/config.example" \
   "${TARGET_DIR}/pre-backup.d/10-marker.sh" \
   "${TARGET_DIR}/post-backup.d/90-cleanup-dumps.sh"
