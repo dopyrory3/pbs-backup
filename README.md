@@ -12,6 +12,8 @@ The same code is deployed to every VM. Only `/etc/pbs-backup/config` is per-VM.
 - `deploy/pbs-backup.service` - systemd oneshot service.
 - `deploy/pbs-backup.timer` - Daily timer with randomized delay.
 - `install.sh` - Idempotent installer for a single VM.
+- `uninstall.sh` - Removes what install.sh added, with opt-in flags for deeper cleanup.
+- `restore.sh` - Snapshot list/mount/unmount and manual-package replay helper.
 
 ## Config file
 
@@ -182,31 +184,34 @@ systemctl list-timers pbs-backup.timer
 
 ## Restore basics
 
-List snapshots:
+`restore.sh` wraps the common restore steps. It sources `/etc/pbs-backup/config`
+for repository credentials, same as `run-backup.sh`.
 
 ```bash
-proxmox-backup-client snapshot list
-```
-
-Mount and restore files:
-
-```bash
-mkdir -p /mnt/restore
-proxmox-backup-client mount <snapshot-id> root.pxar /mnt/restore
+./restore.sh list                # list snapshots in the configured repository
+./restore.sh mount                # pick a snapshot interactively, mount at /mnt/restore
+./restore.sh mount <snapshot-id>  # mount a specific snapshot (as shown by `list`)
+./restore.sh status               # check whether /mnt/restore is currently mounted
 # Copy what you need from /mnt/restore
-proxmox-backup-client unmount /mnt/restore
+./restore.sh unmount              # unmount /mnt/restore
 ```
+
+Interactive snapshot selection (`mount` with no snapshot argument) requires
+`jq`; without it, use `list` and pass a snapshot ID to `mount` explicitly.
 
 ## Full VM loss runbook (file-level)
 
 1. Provision fresh Ubuntu LTS VM.
 2. Install this suite and `proxmox-backup-client`.
-3. Restore required data from snapshot.
+3. Restore required data from snapshot with `./restore.sh mount`.
 4. Replay package manifests:
 
 ```bash
-xargs -a /etc/pbs-backup/manual-packages.txt apt-get install -y
+./restore.sh packages
 ```
+
+This reinstalls packages listed in the mounted snapshot's (or local)
+`manual-packages.txt`, prompting for confirmation first.
 
 5. Restore selected `/etc` files only as needed.
 6. Keep host-specific items fresh on rebuild:
