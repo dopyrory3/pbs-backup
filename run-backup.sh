@@ -36,7 +36,8 @@ run_hooks() {
     fi
 
     log "INFO" "Running ${hook_stage} hook: $(basename "$hook")"
-    if "$hook"; then
+    # Close the lock fd so anything a hook leaves running can't hold the lock.
+    if "$hook" 9>&-; then
       log "INFO" "Completed ${hook_stage} hook: $(basename "$hook")"
     else
       log "WARN" "${hook_stage} hook failed (continuing): $(basename "$hook")"

@@ -122,3 +122,24 @@ test_concurrent_run_exits_3() {
   assert_eq 0 "$rc" "run after lock released"
   assert_eq 2 "$(count_lines "$CASE/backup-calls.log")" "backup calls after release"
 }
+
+test_hook_daemon_does_not_hold_lock() {
+  setup
+  # A hook that leaves a long-lived process behind (e.g. restarting a daemon)
+  # must not inherit the lock fd, or every later run would exit 3.
+  printf '#!/usr/bin/env bash\nsleep 30 >/dev/null 2>&1 &\necho $! > "%s/daemon.pid"\n' "$CASE" \
+    > "$CASE/etc/post-backup.d/20-daemon.sh"
+  chmod +x "$CASE/etc/post-backup.d/20-daemon.sh"
+
+  local rc=0
+  run_backup >/dev/null 2>&1 || rc=$?
+  assert_eq 0 "$rc" "first run exit code"
+
+  rm -f "$CASE/etc/post-backup.d/20-daemon.sh"
+  rc=0
+  run_backup >/dev/null 2>&1 || rc=$?
+  assert_eq 0 "$rc" "run while hook's background process is alive"
+
+  [[ -f "$CASE/daemon.pid" ]] && kill "$(cat "$CASE/daemon.pid")" 2>/dev/null
+  true
+}
