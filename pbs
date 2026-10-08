@@ -81,8 +81,10 @@ fetch_and_upgrade() {
   fi
 
   local tmp
-  tmp="$(mktemp -d /tmp/pbs-upgrade.XXXXXX)"
-  trap 'rm -rf "$tmp"' EXIT
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/pbs-upgrade.XXXXXX")"
+  # Expand the path now: $tmp is out of scope by the time the EXIT trap runs.
+  # The trap leaves the exit status alone, so upgrade.sh's code propagates.
+  trap "rm -rf $(printf '%q' "$tmp")" EXIT
 
   if command -v git >/dev/null 2>&1; then
     echo "Fetching ${UPGRADE_REPO}@${UPGRADE_REF} with git..."
