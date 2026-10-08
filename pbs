@@ -88,7 +88,13 @@ fetch_and_upgrade() {
 
   if command -v git >/dev/null 2>&1; then
     echo "Fetching ${UPGRADE_REPO}@${UPGRADE_REF} with git..."
-    git clone --quiet --depth 1 --branch "$UPGRADE_REF" "$UPGRADE_REPO" "$tmp/src"
+    # --branch only takes branches and tags; for a commit SHA, fetch it directly.
+    if ! git clone --quiet --depth 1 --branch "$UPGRADE_REF" "$UPGRADE_REPO" "$tmp/src" 2>/dev/null; then
+      rm -rf "$tmp/src"
+      git init --quiet "$tmp/src"
+      git -C "$tmp/src" fetch --quiet --depth 1 "$UPGRADE_REPO" "$UPGRADE_REF"
+      git -C "$tmp/src" -c advice.detachedHead=false checkout --quiet FETCH_HEAD
+    fi
   else
     echo "git not found; fetching tarball with curl..."
     curl -fsSL "${UPGRADE_REPO}/archive/${UPGRADE_REF}.tar.gz" -o "$tmp/src.tar.gz"

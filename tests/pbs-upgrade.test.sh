@@ -81,6 +81,13 @@ test_upgrade_tag_ref() {
   assert_no_leak
 }
 
+test_upgrade_commit_sha_ref() {
+  PBS_UPGRADE_REF="$V1_SHA" run_upgrade -y
+  assert_eq 0 "$rc" "exit code (output: ${out})"
+  assert_eq "v1 -y" "$(recorded)" "upgrade.sh record"
+  assert_no_leak
+}
+
 test_upgrade_yes_passes_args_through() {
   PBS_UPGRADE_REF=main run_upgrade --force -y --extra
   assert_eq 0 "$rc" "exit code (output: ${out})"
