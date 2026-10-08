@@ -2,9 +2,12 @@
 set -euo pipefail
 
 TAG="pbs-backup"
-CONFIG_FILE="/etc/pbs-backup/config"
-PRE_HOOK_DIR="/etc/pbs-backup/pre-backup.d"
-POST_HOOK_DIR="/etc/pbs-backup/post-backup.d"
+# PBS_ETC_DIR and PBS_LOCK_FILE are overridable for tests; defaults are production paths.
+PBS_ETC_DIR="${PBS_ETC_DIR:-/etc/pbs-backup}"
+CONFIG_FILE="${PBS_ETC_DIR}/config"
+PRE_HOOK_DIR="${PBS_ETC_DIR}/pre-backup.d"
+POST_HOOK_DIR="${PBS_ETC_DIR}/post-backup.d"
+LOCK_FILE="${PBS_LOCK_FILE:-/run/lock/pbs-backup.lock}"
 
 log() {
   local level="$1"
@@ -66,17 +69,25 @@ if [[ "$(declare -p EXTRA_EXCLUDES 2>/dev/null)" != declare\ -a* ]]; then
   EXTRA_EXCLUDES=()
 fi
 
+# Hold an exclusive lock for the whole run (hooks included) so a manual run
+# cannot overlap the timer's run. Released automatically when the script exits.
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  log "ERROR" "Another backup run is already running (lock held: ${LOCK_FILE}); exiting"
+  exit 3
+fi
+
 export PBS_REPOSITORY
 export PBS_PASSWORD
 export PBS_FINGERPRINT
 export DUMP_DIR="${DUMP_DIR:-/var/backups/pbs-dumps}"
 
 log "INFO" "=== PBS backup run started at $(date -Is) ==="
-log "INFO" "Preparing package manifests in /etc/pbs-backup"
+log "INFO" "Preparing package manifests in ${PBS_ETC_DIR}"
 
-apt-mark showmanual > /etc/pbs-backup/manual-packages.txt
+apt-mark showmanual > "${PBS_ETC_DIR}/manual-packages.txt"
 
-dpkg --get-selections > /etc/pbs-backup/package-selections.txt
+dpkg --get-selections > "${PBS_ETC_DIR}/package-selections.txt"
 
 run_hooks "$PRE_HOOK_DIR" "pre-backup"
 

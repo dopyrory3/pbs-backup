@@ -171,6 +171,12 @@ Options:
 Hook failures are logged as warnings and do not abort the backup run.
 Only backup command failure causes non-zero exit.
 
+Runs are serialized with a non-blocking `flock` on `/run/lock/pbs-backup.lock`,
+held for the whole run including hooks. If another run (e.g. the timer) is in
+progress, a second run logs an error and exits with code `3` without running
+hooks or the backup. Exit codes: `0` success, `1` backup failed, `2` missing
+config, `3` another run in progress.
+
 ## Standard excludes
 
 Default excludes used by the runner:
